@@ -1,0 +1,8 @@
+latitude = 29.507477
+longitude = 34.919584
+distance_minimal = 50
+distance_maximal = 100
+fov_horizontal = 90
+fov_vertical = 60
+height_value = 10
+color_value = (255,0,0)
