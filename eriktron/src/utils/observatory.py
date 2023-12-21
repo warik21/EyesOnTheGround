@@ -13,17 +13,19 @@ class Observatory:
     It will also include the minimal and maximal range that it can see, and the color.
     """
 
-    def __init__(self, latitude, longitude, distance_minimal, distance_maximal, start_angle, fov_horizontal, 
-                 fov_vertical, height, color):
+    def __init__(self, latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal, 
+                 fov_vertical, height, color, thickness):
         self.latitude = latitude
         self.longitude = longitude
         self.distance_minimal = distance_minimal
         self.distance_maximal = distance_maximal
         self.start_angle = start_angle
+        self.end_angle = end_angle
         self.fov_horizontal = fov_horizontal
         self.fov_vertical = fov_vertical
         self.height = height
         self.color = color
+        self.thickness = thickness
 
     def calc_min_distance(self):
         """
@@ -92,13 +94,15 @@ class Observatory:
             distance_minimal = int(data['distance_minimal'])
             distance_maximal = int(data['distance_maximal'])
             start_angle = int(data['start_angle'])
+            end_angle = int(data['end_angle'])
             fov_horizontal = int(data['fov_horizontal'])
             fov_vertical = int(data['fov_vertical'])
             height = int(data['height_value'])
             color = tuple(map(int, data['color_value'][1:-1].split(',')))  # Parses "(255,0,0)" to (255, 0, 0)
+            thickness = int(data['thickness'])
 
-            return cls(latitude, longitude, distance_minimal, distance_maximal, start_angle, fov_horizontal, 
-                       fov_vertical, height, color)
+            return cls(latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal, 
+                       fov_vertical, height, color, thickness)
     
     def get_pixel_location(self, geotiff_path):
         """
@@ -106,36 +110,59 @@ class Observatory:
     :param geotiff_path: The path of the geotiff file.
     :return: The pixel location of the observatory in the image.
     """
-        #TODO: Check whether this actually gets only the metadata and not the whole image
-        with rasterio.open(geotiff_path, 'r') as src:
-            # Transform the observatory's geographic coordinates to the image's coordinate system
-            x, y = src.index(self.latitude, self.longitude)
-
-
+        # #TODO: Check whether this actually gets only the metadata and not the whole image
+        # with rasterio.open(geotiff_path, 'r') as src:
+        #     # Transform the observatory's geographic coordinates to the image's coordinate system
+        #     x, y = src.index(self.latitude, self.longitude)
+# 
+        # if x < 0 or y < 0:
+        #     raise ValueError("Pixel location is out of image bounds")
+# 
+        x, y = int(self.latitude), int(self.longitude)
         return x, y
 
-    def draw_mask(self, image_shape, geotiff_path):
+    def get_pixel_location2(self, image):
+        """
+        This function gets the pixel location of the observatory in the image.
+        :param geotiff_path: The path of the geotiff file.
+        :return: The pixel location of the observatory in the image.
+        """
+        return image.index(self.latitude, self.longitude)
+
+    def draw_mask(self, image_shape, geotiff_path, position):
         """
         This function draws the mask of the observatory on the image.
-        :param geotiff_path: The path of the geotiff file.
+        params:
+        geotiff_path(str): The path of the geotiff file.
+        image_shape(tuple): The shape of the image.
+        position(float): The position of the camera, rangning from 0 to 1.
         :return: The mask of the observatory.
         """
-        mask_maximal: np.ndarray = np.zeros(image_shape)
-        mask_minimal: np.ndarray = np.zeros(image_shape)
+        mask_maximal: np.ndarray = np.zeros(image_shape, dtype='uint8')
+        mask_minimal: np.ndarray = np.zeros(image_shape, dtype='uint8')
 
         center = self.get_pixel_location(geotiff_path)
-        start_angle = self.start_angle
-        end_angle = start_angle + self.fov_horizontal
-        thickness = -1
+        dist_from_start = (self.end_angle - self.start_angle) * position
+        top_arc = self.start_angle + dist_from_start
+        bottom_arc = top_arc + self.fov_horizontal
+        thickness = self.thickness
 
 
         cv2.ellipse(mask_maximal, center, (self.distance_maximal, self.distance_maximal), 0,
-                    startAngle=start_angle, endAngle=end_angle, color=self.color, thickness=thickness)
+                    startAngle=top_arc, endAngle=bottom_arc, color=self.color, thickness=thickness)
+        if thickness > 0:
+            start_point = (int(center[0] + self.distance_maximal * np.cos(np.deg2rad(top_arc))),
+                       int(center[1] + self.distance_maximal * np.sin(np.deg2rad(top_arc))))
+            end_point = (int(center[0] + self.distance_maximal * np.cos(np.deg2rad(bottom_arc))),
+                     int(center[1] + self.distance_maximal * np.sin(np.deg2rad(bottom_arc))))
+
+            # Draw the lines
+            cv2.line(mask_maximal, center, start_point, self.color, self.thickness)
+            cv2.line(mask_maximal, center, end_point, self.color, self.thickness)
+    
         cv2.ellipse(mask_minimal, center, (self.distance_minimal, self.distance_minimal), 0,
-                    startAngle=start_angle, endAngle=end_angle, color=self.color, thickness=thickness)
+                    startAngle=top_arc, endAngle=bottom_arc, color=self.color, thickness=thickness)
         
         mask = cv2.subtract(mask_maximal, mask_minimal)
-        mask = mask.astype('uint8')
-
 
         return mask
