@@ -63,6 +63,7 @@ for camera in cameras:
 result_resized = cv2.resize(image, (result_size, int(result_size * result_ratio)))
 cv2.imwrite('C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/eriktron/eriktron/src/camera_movement_still.jpg', result_resized)
 
+out = cv2.VideoWriter('C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/eriktron/eriktron/src/camera_movement_still.mp4', fourcc, 3.0, (result_size, int(result_size * result_ratio)))
 for pos in tqdm(positions):
     new_image = image.copy()
     for camera in cameras:

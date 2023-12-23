@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 import rasterio
 import cv2
-from shapely.geometry import Point, MultiPolygon, Polygon
+import rasterio
+from rasterio.Transform import Affine
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 
@@ -15,17 +16,57 @@ class Observatory:
 
     def __init__(self, latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal, 
                  fov_vertical, height, color, thickness):
+        """
+        Initializes the attributes of an observatory object with the provided values.
+
+        Args:
+            latitude (float): The latitude of the observatory.
+            longitude (float): The longitude of the observatory.
+            distance_minimal (int): The minimal distance that the observatory can see.
+            distance_maximal (int): The maximal distance that the observatory can see.
+            start_angle (int): The starting angle of the observatory's field of view.
+            end_angle (int): The ending angle of the observatory's field of view.
+            fov_horizontal (int): The horizontal field of view of the observatory.
+            fov_vertical (int): The vertical field of view of the observatory.
+            height (int): The height of the observatory.
+            color (tuple): The color of the observatory.
+            thickness (int): The thickness of the observatory.
+        """
         self.latitude = latitude
         self.longitude = longitude
         self.distance_minimal = distance_minimal
         self.distance_maximal = distance_maximal
-        self.start_angle = start_angle
-        self.end_angle = end_angle
+        self.start_angle = start_angle  # The angle in which the camera starts the scan. Should be smaller than end_angle
+        self.end_angle = end_angle  # The angle in which the camera ends the scan. Should be larger than start_angle
         self.fov_horizontal = fov_horizontal
         self.fov_vertical = fov_vertical
         self.height = height
         self.color = color
         self.thickness = thickness
+
+
+    def check_validity(self):
+        """
+        This function checks whether the observatory's parameters are valid.
+        :return: True if the parameters are valid, False otherwise.
+        """
+        if self.start_angle > self.end_angle:
+            return False
+        if self.distance_minimal > self.distance_maximal:
+            return False
+        if self.fov_horizontal > 360 or self.fov_horizontal < 0:
+            return False
+        if self.fov_vertical > 180 or self.fov_vertical < 0:
+            return False
+        if self.height < 0:
+            return False
+        if not np.isclose(self.calc_max_distance(), self.distance_maximal, atol=50):
+            return False
+        if not np.isclose(self.calc_min_distance(), self.distance_minimal, atol=50):
+            return False
+        if not np.isclose(self.calc_fov_horizontal(), self.fov_horizontal, atol=5):
+            return False
+        return True
 
     def calc_min_distance(self):
         """
@@ -166,3 +207,16 @@ class Observatory:
         mask = cv2.subtract(mask_maximal, mask_minimal)
 
         return mask
+
+
+    def reset_coordinates(self, image_shape, known_pixels, known_coords, geotiff_path):
+        """
+        This function resets the observatory's coordinates to the image's coordinate system.
+        :param 
+        image_shape: The shape of the image.
+        known_pixels: The known pixel coordinates of the observatory.
+        known_coords: The known geographic coordinates of the observatory.
+        geotiff_path: The path of the geotiff file.
+        :return: None
+        """
+        pixel_coords = 
