@@ -1,12 +1,7 @@
-import pandas as pd
 import numpy as np
-import rasterio
 import cv2
 import rasterio
-from rasterio.Transform import Affine
-from mpl_toolkits.basemap import Basemap
-import matplotlib.pyplot as plt
-
+from rasterio.transform import from_origin
 
 class Observatory:
     """This class is used to store the observatory information.
@@ -14,7 +9,7 @@ class Observatory:
     It will also include the minimal and maximal range that it can see, and the color.
     """
 
-    def __init__(self, latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal, 
+    def __init__(self, latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal,
                  fov_vertical, height, color, thickness):
         """
         Initializes the attributes of an observatory object with the provided values.
@@ -43,7 +38,6 @@ class Observatory:
         self.height = height
         self.color = color
         self.thickness = thickness
-
 
     def check_validity(self):
         """
@@ -142,9 +136,9 @@ class Observatory:
             color = tuple(map(int, data['color_value'][1:-1].split(',')))  # Parses "(255,0,0)" to (255, 0, 0)
             thickness = int(data['thickness'])
 
-            return cls(latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal, 
+            return cls(latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal,
                        fov_vertical, height, color, thickness)
-    
+
     def get_pixel_location(self, geotiff_path):
         """
     This function gets the pixel location of the observatory in the image.
@@ -155,17 +149,17 @@ class Observatory:
         # with rasterio.open(geotiff_path, 'r') as src:
         #     # Transform the observatory's geographic coordinates to the image's coordinate system
         #     x, y = src.index(self.latitude, self.longitude)
-# 
+        #
         # if x < 0 or y < 0:
         #     raise ValueError("Pixel location is out of image bounds")
-# 
+        #
         x, y = int(self.latitude), int(self.longitude)
         return x, y
 
     def get_pixel_location2(self, image):
         """
         This function gets the pixel location of the observatory in the image.
-        :param geotiff_path: The path of the geotiff file.
+        :param image: the image we're processing
         :return: The pixel location of the observatory in the image.
         """
         return image.index(self.latitude, self.longitude)
@@ -176,7 +170,7 @@ class Observatory:
         params:
         geotiff_path(str): The path of the geotiff file.
         image_shape(tuple): The shape of the image.
-        position(float): The position of the camera, rangning from 0 to 1.
+        position(float): The position of the camera, ranging from 0 to 1.
         :return: The mask of the observatory.
         """
         mask_maximal: np.ndarray = np.zeros(image_shape, dtype='uint8')
@@ -188,35 +182,21 @@ class Observatory:
         bottom_arc = top_arc + self.fov_horizontal
         thickness = self.thickness
 
-
         cv2.ellipse(mask_maximal, center, (self.distance_maximal, self.distance_maximal), 0,
                     startAngle=top_arc, endAngle=bottom_arc, color=self.color, thickness=thickness)
         if thickness > 0:
             start_point = (int(center[0] + self.distance_maximal * np.cos(np.deg2rad(top_arc))),
-                       int(center[1] + self.distance_maximal * np.sin(np.deg2rad(top_arc))))
+                           int(center[1] + self.distance_maximal * np.sin(np.deg2rad(top_arc))))
             end_point = (int(center[0] + self.distance_maximal * np.cos(np.deg2rad(bottom_arc))),
-                     int(center[1] + self.distance_maximal * np.sin(np.deg2rad(bottom_arc))))
+                         int(center[1] + self.distance_maximal * np.sin(np.deg2rad(bottom_arc))))
 
             # Draw the lines
             cv2.line(mask_maximal, center, start_point, self.color, self.thickness)
             cv2.line(mask_maximal, center, end_point, self.color, self.thickness)
-    
+
         cv2.ellipse(mask_minimal, center, (self.distance_minimal, self.distance_minimal), 0,
                     startAngle=top_arc, endAngle=bottom_arc, color=self.color, thickness=thickness)
-        
+
         mask = cv2.subtract(mask_maximal, mask_minimal)
 
         return mask
-
-
-    def reset_coordinates(self, image_shape, known_pixels, known_coords, geotiff_path):
-        """
-        This function resets the observatory's coordinates to the image's coordinate system.
-        :param 
-        image_shape: The shape of the image.
-        known_pixels: The known pixel coordinates of the observatory.
-        known_coords: The known geographic coordinates of the observatory.
-        geotiff_path: The path of the geotiff file.
-        :return: None
-        """
-        pixel_coords = 
