@@ -12,3 +12,13 @@ Taba
 
 Top right point should be:
 29.573384, 35.024624
+
+
+ref_point1_coord[1] - ref_point1_pixel[0] * pixel_width
+34.888387839351886
+ref_point2_coord[1] - ref_point2_pixel[0] * pixel_width
+34.888387839351886
+ref_point2_coord[0] - ref_point2_pixel[1] * pixel_height
+29.57225072652317
+ref_point1_coord[0] - ref_point1_pixel[1] * pixel_height
+29.57225072652317

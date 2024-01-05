@@ -13,24 +13,24 @@ taba_pixels = 2506, 17567  #top left (x, y)
 def reset_coordinates(ref_point1_pixel, ref_point1_coord, ref_point2_pixel, ref_point2_coord, geotiff_path, output_path):
     with rasterio.open(geotiff_path) as dataset:
         # Calculate the pixel size
-        pixel_height = (ref_point2_coord[1] - ref_point1_coord[1]) / (ref_point2_pixel[0] - ref_point1_pixel[0])
-        pixel_width = (ref_point2_coord[0] - ref_point1_coord[0]) / (ref_point2_pixel[1] - ref_point1_pixel[1])
+        pixel_width = (ref_point2_coord[1] - ref_point1_coord[1]) / (ref_point2_pixel[0] - ref_point1_pixel[0])
+        pixel_height = (ref_point1_coord[0] - ref_point2_coord[0]) / (ref_point1_pixel[1] - ref_point2_pixel[1])
 
         # Since y-axis in image coordinates increases downwards (opposite to geographic latitude)
         # the pixel height should be negative.
-        pixel_height = -abs(pixel_height)
+        #  pixel_height = -abs(pixel_height)
 
         # Calculate the top-left corner of the top-left pixel in geographic coordinates
         # This is done by back-calculating from one of the reference points
-        top_left_lon = ref_point1_coord[1] - ref_point1_pixel[0] * pixel_width
-        top_left_lat = ref_point1_coord[0] + ref_point1_pixel[1] * pixel_height
+        top_left_lon = ref_point1_coord[1] - ref_point1_pixel[0] * pixel_width  
+        top_left_lat = ref_point1_coord[0] - ref_point1_pixel[1] * pixel_height
         print(f'Top left corner of the image is {top_left_lon}, {top_left_lat}')
         # Create the affine transformation
-        transform = from_origin(top_left_lon, top_left_lat, pixel_width, pixel_height)
+        transform = from_origin(top_left_lat, top_left_lon, -pixel_width, pixel_height)
 
         # Read data and update metadata
         data = dataset.read()
-        new_meta = dataset.meta.copy()
+        new_meta = dataset.meta.copy() 
         new_meta.update({"transform": transform})
 
         # Write the data to a new file with updated metadata
@@ -44,7 +44,7 @@ output_path = 'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/image
 reset_coordinates(zvia_pixels, zvia_coords, taba_pixels, taba_coords, im_path, output_path)
 
 # Test the new coordinates
-with rasterio.open(im_path, 'r') as dataset:
+with rasterio.open(output_path, 'r') as dataset:
     # Transform the observatory's geographic coordinates to the image's coordinate system
     x, y = dataset.index(zvia_coords[0], zvia_coords[1])
     print(f'Zvia coordinates in the new image are {x}, {y}')
