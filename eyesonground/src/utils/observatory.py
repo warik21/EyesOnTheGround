@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import rasterio
+from geopy.distance import great_circle
 from rasterio.transform import from_origin
 
 class Observatory:
@@ -9,35 +10,46 @@ class Observatory:
     It will also include the minimal and maximal range that it can see, and the color.
     """
 
-    def __init__(self, latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal,
-                 fov_vertical, height, color, thickness):
+    def __init__(self, latitude, longitude, 
+                fov_horizontal=32.0, fov_vertical=18.0, height=15.0,
+                distance_minimal=None, distance_maximal=None, 
+                start_angle=None, end_angle=None,
+                color=None, thickness=None):
         """
-        Initializes the attributes of an observatory object with the provided values.
+        Initializes the attributes of an observatory object. Optional parameters are set to None by default.
 
         Args:
             latitude (float): The latitude of the observatory.
             longitude (float): The longitude of the observatory.
-            distance_minimal (int): The minimal distance that the observatory can see.
-            distance_maximal (int): The maximal distance that the observatory can see.
-            start_angle (int): The starting angle of the observatory's field of view.
-            end_angle (int): The ending angle of the observatory's field of view.
-            fov_horizontal (int): The horizontal field of view of the observatory.
-            fov_vertical (int): The vertical field of view of the observatory.
-            height (int): The height of the observatory.
-            color (tuple): The color of the observatory.
-            thickness (int): The thickness of the observatory.
+            distance_minimal (int, optional): The minimal distance that the observatory can see.
+            distance_maximal (int, optional): The maximal distance that the observatory can see.
+            start_angle (int, optional): The starting angle of the observatory's field of view.
+            end_angle (int, optional): The ending angle of the observatory's field of view.
+            fov_horizontal (int, optional): The horizontal field of view of the observatory.
+            fov_vertical (int, optional): The vertical field of view of the observatory.
+            height (int, optional): The height of the observatory.
+            color (tuple, optional): The color of the observatory.
+            thickness (int, optional): The thickness of the observatory.
         """
         self.latitude = latitude
         self.longitude = longitude
         self.distance_minimal = distance_minimal
         self.distance_maximal = distance_maximal
-        self.start_angle = start_angle  # The angle in which the camera starts the scan. Should be smaller than end_angle
-        self.end_angle = end_angle  # The angle in which the camera ends the scan. Should be larger than start_angle
+        self.start_angle = start_angle
+        self.end_angle = end_angle
         self.fov_horizontal = fov_horizontal
         self.fov_vertical = fov_vertical
         self.height = height
-        self.color = color
-        self.thickness = thickness
+        self.color = color if color is not None else (255, 255, 255)  # Default color set as white
+        self.thickness = thickness if thickness is not None else 1   # Default thickness
+
+
+    def coordinates(self):
+        """
+        This function returns the observatory's coordinates.
+        :return: The observatory's coordinates.
+        """
+        return self.latitude, self.longitude
 
     def check_validity(self):
         """
@@ -65,58 +77,63 @@ class Observatory:
     def calc_min_distance(self):
         """
         This function calculates the minimal distance that the observatory can see based on
-        its height, FOV and maximal distance.
-        :return:
+        its height, FOV, and maximal distance. It updates the distance_minimal attribute.
         """
-        height = self.height
-        fov_horizontal = self.fov_horizontal
-        max_distance = self.distance_maximal
+        deg_max = np.arctan(self.distance_maximal / self.height)
+        deg_min = deg_max - np.radians(self.fov_horizontal)
 
-        deg_max = np.arctan(max_distance / height)
+        # Calculate the new minimal distance
+        new_min_distance = self.height * np.tan(deg_min)
+        
+        # Print the existing and new minimal distance
+        print(f"Existing Min Distance:{self.distance_minimal}, New Min Distance:{new_min_distance}")
+        
+        # Update the distance_minimal attribute
+        self.distance_minimal = new_min_distance
 
-        deg_min = deg_max - fov_horizontal
-
-        min_distance = height * np.tan(deg_min)
-
-        return min_distance
+        return new_min_distance
 
     def calc_max_distance(self):
         """
         This function calculates the maximal distance that the observatory can see based on
-        its height, FOV and minimal distance.
-        :return:
+        its height, FOV, and minimal distance. It updates the distance_maximal attribute.
         """
-        height = self.height
-        fov_horizontal = self.fov_horizontal
-        min_distance = self.distance_minimal
+        deg_min = np.arctan(self.distance_minimal / self.height)
+        deg_max = deg_min + np.radians(self.fov_horizontal)
 
-        deg_min = np.arctan(min_distance / height)
-
-        deg_max = deg_min + fov_horizontal
-
-        max_distance = height * np.tan(deg_max)
-
-        return max_distance
+        # Calculate the new maximal distance
+        new_max_distance = self.height * np.tan(deg_max)
+        # Print the existing maximal distance
+        print(f"Existing Max Distance:{self.distance_maximal}, New Max Distance:{new_max_distance}")
+        # Update the distance_maximal attribute
+        self.distance_maximal = new_max_distance
+        
+        return new_max_distance
 
     def calc_fov_horizontal(self):
         """
         This function calculates the horizontal FOV that the observatory can see based on
-        its height, minimal distance and maximal distance.
-        :return:
+    its height, minimal distance, and maximal distance. It updates the fov_horizontal attribute.
         """
-        height = self.height
-        min_distance = self.distance_minimal
-        max_distance = self.distance_maximal
+        deg_min = np.arctan(self.distance_minimal / self.height)
+        deg_max = np.arctan(self.distance_maximal / self.height)
 
-        deg_min = np.arctan(min_distance / height)
-        deg_max = np.arctan(max_distance / height)
+        # Calculate the new FOV horizontal
+        new_fov_horizontal = np.degrees(deg_max - deg_min)
 
-        fov_horizontal = deg_max - deg_min
+        # Print the existing and new FOV horizontal
+        print(f"Existing FOV Horizontal:{self.fov_horizontal}, New FOV Horizontal:{new_fov_horizontal}")
+        
+        # Update the fov_horizontal attribute
+        self.fov_horizontal = new_fov_horizontal
 
-        return fov_horizontal
+        return new_fov_horizontal
 
     @classmethod
     def load_from_file(cls, file_path):
+        """
+        This function loads the observatory's parameters from a file.
+        """
         with open(file_path, 'r') as file:
             data = {}
             for line in file:
@@ -139,31 +156,28 @@ class Observatory:
             return cls(latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal,
                        fov_vertical, height, color, thickness)
 
-    def get_pixel_location(self, geotiff_path):
+    def get_pixel_location(self, image):
         """
     This function gets the pixel location of the observatory in the image.
     :param geotiff_path: The path of the geotiff file.
     :return: The pixel location of the observatory in the image.
     """
-        # #TODO: Check whether this actually gets only the metadata and not the whole image
-        # with rasterio.open(geotiff_path, 'r') as src:
-        #     # Transform the observatory's geographic coordinates to the image's coordinate system
-        #     x, y = src.index(self.latitude, self.longitude)
-        #
-        # if x < 0 or y < 0:
-        #     raise ValueError("Pixel location is out of image bounds")
-        #
-        x, y = int(self.latitude), int(self.longitude)
+        y, x = image.index(self.longitude, self.latitude)
         return x, y
-
-    def get_pixel_location2(self, image):
+    
+    def find_starting_point(self, extreme_point, geotiff_path):
         """
-        This function gets the pixel location of the observatory in the image.
-        :param image: the image we're processing
-        :return: The pixel location of the observatory in the image.
+        This function takes the extreme point and finds the maximal_distance by understanding
+        the distance from the extreme point to the observatory.
+        :param extreme_point: The extreme point of the observatory.
+        :param geotiff_path: The path of the geotiff file.
+        :return: The maximal distance.
         """
-        return image.index(self.latitude, self.longitude)
-
+        extreme_point = np.array(extreme_point)
+        observatory_point = np.array(self.longitude, self.latitude)
+        distance = np.linalg.norm(observatory_point - extreme_point)
+        return distance
+    
     def draw_mask(self, image_shape, geotiff_path, position):
         """
         This function draws the mask of the observatory on the image.

@@ -3,6 +3,7 @@ from rasterio.transform import from_origin
 import numpy as np
 import pyproj
 from utils.utils import *
+from geopy.distance import great_circle
 
 zvia_coords = 29.544043, 34.975739  #top right (lat, lon)
 zvia_pixels = 16269, 6045  #bottom right (x, y)
