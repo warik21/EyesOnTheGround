@@ -1,0 +1,70 @@
+import pandas as pd
+import numpy as np
+from utils.observatory import Observatory
+from utils.scan import ScanningArea
+import cv2
+from glob import glob
+from tqdm import tqdm
+
+class define_scan():
+    """
+    This class takes in an observatory(or several observatories) and a scanning area and finds the optimal scan
+    in terms of speed and amount of pixels covered.
+    Each pixel is also given a score based on how confident we are on its coverage.
+    """
+    def __init__(self, observatory: Observatory, scan_area: ScanningArea):
+        # TODO: make it scalable for several observatories
+        self.observatory = observatory
+        self.x_min = scan_area.latitude_bounds[0]
+        self.x_max = scan_area.latitude_bounds[1]
+        self.y_min = scan_area.longitude_bounds[0]
+        self.y_max = scan_area.longitude_bounds[1]
+
+    def create_scan(self):
+        """
+        This function creates a scan from the observatory's position and the scanning area.
+        :return: A scan object
+        """
+        # Define the scanning area
+        self.scan_area = ScanningArea((self.x_max, self.y_max), (self.x_min, self.y_min))
+        
+        self.fov = self.observatory
+
+        return None
+    
+
+class Annulus:
+    def __init__(self, center, distance_maximal, distance_minimal, start_angle, end_angle):
+        """
+        Initializes an Annulus object representing the area between two ellipses.
+
+        :param center: Tuple (x, y) representing the center of the ellipses.
+        :param distance_maximal: The major radius of the outer ellipse.
+        :param distance_minimal: The major radius of the inner ellipse.
+        :param start_angle: The starting angle of the elliptical section in degrees.
+        :param end_angle: The ending angle of the elliptical section in degrees.
+        """
+        self.center = center
+        self.distance_maximal = distance_maximal
+        self.distance_minimal = distance_minimal
+        self.start_angle = start_angle
+        self.end_angle = end_angle
+
+    def contains_point(self, point):
+        """
+        Check if a point is inside the annulus.
+
+        :param point: Tuple (x, y) representing the point to check.
+        :return: Boolean indicating if the point is inside the annulus.
+        """
+        x, y = point
+        x -= self.center[0]
+        y -= self.center[1]
+
+        # Check if within outer ellipse
+        in_outer = (x**2 / self.distance_maximal**2) + (y**2 / self.distance_maximal**2) <= 1
+
+        # Check if outside inner ellipse
+        out_inner = (x**2 / self.distance_minimal**2) + (y**2 / self.distance_minimal**2) > 1
+
+        return in_outer and out_inner

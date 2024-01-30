@@ -1,41 +1,13 @@
 import rasterio
-from rasterio.transform import from_origin
 import numpy as np
 from utils.utils import *
 from geopy.distance import great_circle
 import numpy as np
 from utils.observatory import Observatory
-from geopy.point import Point
 import math
 import cv2
+from utils.scan import ScanningArea
 
-
-class ScanningArea:
-    def __init__(self, corner1, corner2):
-        """
-        Initializes a ScanningArea object with a rectangular shape based on two diagonal corners.
-
-        :param corner1: Tuple of (latitude, longitude) for the first corner.
-        :param corner2: Tuple of (latitude, longitude) for the opposite corner.
-        """
-        self.corner1 = Point(corner1)
-        self.corner2 = Point(corner2)
-        self._calculate_rectangle()
-
-    def _calculate_rectangle(self):
-        """
-        Calculate the rectangle's corners based on two diagonal corners.
-        """
-        # Determine the top left and bottom right corners based on latitude and longitude
-        top_left = Point(max(self.corner1.latitude, self.corner2.latitude), 
-                         min(self.corner1.longitude, self.corner2.longitude))
-        bottom_right = Point(min(self.corner1.latitude, self.corner2.latitude), 
-                             max(self.corner1.longitude, self.corner2.longitude))
-
-        self.top_left_corner = (top_left.latitude, top_left.longitude)
-        self.bottom_right_corner = (bottom_right.latitude, bottom_right.longitude)
-        self.top_right_corner = (top_left.latitude, bottom_right.longitude)
-        self.bottom_left_corner = (bottom_right.latitude, top_left.longitude)
 
 def get_transform_matrix(raster_file_path):
     """
@@ -82,10 +54,9 @@ def draw_direction(image_size, start_point, observatory, length=100, color=(255,
     mask = cv2.subtract(mask_maximal, mask_minimal)
     # Draw the lines
 
-    cv2.arrowedLine(mask, start_point, (end_x, end_y), color, thickness)
+    cv2.arrowedLine(mask, start_point, (end_x, end_y), (0,0,255), thickness)
 
     return mask
-
 
 def calculate_pixel_distance(real_world_distance, resolution):
     """
@@ -124,6 +95,7 @@ def calculate_angle(pixel_location_observatory, pixel_location_top_left):
 
     # Convert angle to degrees
     angle_degrees = math.degrees(angle_radians)
+    angle_degrees = 360 - angle_degrees  # Rotate 180 degrees because the y-axis is flipped
 
     # Normalize the angle to 0-360 degrees
     angle_degrees = (angle_degrees + 360) % 360
@@ -132,27 +104,29 @@ def calculate_angle(pixel_location_observatory, pixel_location_top_left):
 
     
 image_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif'
+transform_matrix, resolution = get_transform_matrix(image_path)
+transform_matrix = affine_to_array(transform_matrix)  # Convert pixels to geo
+inv_transform_matrix = inv_transform_matrix = find_inverse_transform(transform_matrix)  # Convert geo to pixels
 
 # Define the location of the observatory
 third_point_coords = 29.552339, 34.956392  #top left (lat, lon)
 third_point_pixels = 12659, 4263  #bottom left (x, y)
-observatory = Observatory(latitude=third_point_coords[0], longitude=third_point_coords[1])
+observatory = Observatory(latitude=third_point_coords[0], longitude=third_point_coords[1], height=50)
 
 # Define the scanning area
 top_right = 29.548411, 34.974032
-bottom_left = 29.543247, 34.952230
+bottom_left = 29.540247, 34.952230
 scanning_area = ScanningArea(top_right, bottom_left)
+scanning_area.get_pixel_corners(inv_transform_matrix)
 
-starting_point = scanning_area.top_right_corner
-real_world_distance = great_circle(observatory.coordinates(), scanning_area.top_right_corner).meters
+starting_point = scanning_area.top_right_corner_geo
+real_world_distance = great_circle(observatory.coordinates(), scanning_area.top_right_corner_geo).meters
 # To find the distance in pixels, we need to use our image's transform matrix
 # We'll use the inverse transform matrix to convert from pixels to geo
-transform_matrix, resolution = get_transform_matrix(image_path)
-transform_matrix = affine_to_array(transform_matrix)
 
-inv_transform_matrix = inv_transform_matrix = find_inverse_transform(transform_matrix)
+
 observatory_pixels = geo_to_pixel(observatory.latitude, observatory.longitude, inv_transform_matrix)
-scanning_area_top_right_pixels = geo_to_pixel(starting_point[0], starting_point[1], inv_transform_matrix)
+scanning_area_top_right_pixels = scanning_area.top_right_corner_pixels
 
 pixel_distance = np.sqrt((scanning_area_top_right_pixels[1]-observatory_pixels[1])**2 + (scanning_area_top_right_pixels[0]-observatory_pixels[0])**2)  # Euclidean distance
 # pixel_distance = calculate_pixel_distance(real_world_distance, resolution)
@@ -170,14 +144,19 @@ image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
 image_size = (image.shape[0], image.shape[1])  # Width, heig
 start_point = observatory_pixels  # Center of the image
 
-# Draw the arrow and display the image
-arrow_image = draw_direction(image_size, start_point, observatory)
+# Draw the green arrow and display the image
+arrow_image = draw_direction(image_size, start_point, observatory,length=pixel_distance, thickness=100)
 result = cv2.addWeighted(image, 1, arrow_image, 0.5, 0)
+# Draw the rectangle of the scanning area in red:
+result = scanning_area.draw_rectangle(result, color=(0, 0, 255))
+
 result_ratio = image.shape[0] / image.shape[1]
-result_size = 500
+result_size = 2000
 result_resized = cv2.resize(result, (result_size, int(result_size * result_ratio)))
 # result_resized2 = cv2.resize(image, (result_size, int(result_size * result_ratio)))
 cv2.imshow("Direction", result_resized)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
+# Save the image
+cv2.imwrite('C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/arrow.jpg', result_resized)
 

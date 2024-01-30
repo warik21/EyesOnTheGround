@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+from utils import Annulus
 import rasterio
 from geopy.distance import great_circle
 from rasterio.transform import from_origin
@@ -51,6 +52,14 @@ class Observatory:
         """
         return self.latitude, self.longitude
 
+    def get_fov(self):
+        """
+        This function return the observatory's FOV.
+        :return: The observatory's FOV.
+        """
+        
+
+
     def check_validity(self):
         """
         This function checks whether the observatory's parameters are valid.
@@ -80,7 +89,7 @@ class Observatory:
         its height, FOV, and maximal distance. It updates the distance_minimal attribute.
         """
         deg_max = np.arctan(self.distance_maximal / self.height)
-        deg_min = deg_max - np.radians(self.fov_horizontal)
+        deg_min = deg_max - np.radians(self.fov_vertical)
 
         # Calculate the new minimal distance
         new_min_distance = self.height * np.tan(deg_min)
@@ -99,7 +108,7 @@ class Observatory:
         its height, FOV, and minimal distance. It updates the distance_maximal attribute.
         """
         deg_min = np.arctan(self.distance_minimal / self.height)
-        deg_max = deg_min + np.radians(self.fov_horizontal)
+        deg_max = deg_min + np.radians(self.fov_vertical)
 
         # Calculate the new maximal distance
         new_max_distance = self.height * np.tan(deg_max)
@@ -110,23 +119,32 @@ class Observatory:
         
         return new_max_distance
 
-    def calc_fov_horizontal(self):
+    def calc_fov_vertical(self):
         """
-        This function calculates the horizontal FOV that the observatory can see based on
-    its height, minimal distance, and maximal distance. It updates the fov_horizontal attribute.
+        This function calculates the vertical FOV that the observatory can see based on
+    its height, minimal distance, and maximal distance. It updates the fov_vertical attribute.
         """
         deg_min = np.arctan(self.distance_minimal / self.height)
         deg_max = np.arctan(self.distance_maximal / self.height)
 
         # Calculate the new FOV horizontal
-        new_fov_horizontal = np.degrees(deg_max - deg_min)
+        new_fov_vertical = np.degrees(deg_max - deg_min)
 
         # Print the existing and new FOV horizontal
-        print(f"Existing FOV Horizontal:{self.fov_horizontal}, New FOV Horizontal:{new_fov_horizontal}")
+        print(f"Existing FOV Vertical:{self.fov_vertical}, New FOV Vertical:{new_fov_vertical}")
         
         # Update the fov_horizontal attribute
-        self.fov_horizontal = new_fov_horizontal
+        self.fov_horizontal = new_fov_vertical
 
+        return new_fov_vertical
+    
+    def calc_fov_horizontal(self):
+        """
+        This function calculates the horizontal FOV that the observatory can see based on
+        The minimal and maximal angles."""
+        new_fov_horizontal = self.end_angle - self.start_angle
+        print(f"Existing FOV Horizontal:{self.fov_horizontal}, New FOV Horizontal:{new_fov_horizontal}")
+        self.fov_horizontal = new_fov_horizontal
         return new_fov_horizontal
 
     @classmethod
