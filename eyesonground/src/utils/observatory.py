@@ -1,9 +1,10 @@
 import numpy as np
 import cv2
-from utils import Annulus
+from utils.scan import Annulus
 import rasterio
 from geopy.distance import great_circle
 from rasterio.transform import from_origin
+from utils.utils import *
 
 class Observatory:
     """This class is used to store the observatory information.
@@ -12,7 +13,8 @@ class Observatory:
     """
 
     def __init__(self, latitude, longitude, 
-                fov_horizontal=32.0, fov_vertical=18.0, height=15.0,
+                fov_horizontal=32.0, fov_vertical=18.0, height=15.0, 
+                tif_image_path=r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif',
                 distance_minimal=None, distance_maximal=None, 
                 start_angle=None, end_angle=None,
                 color=None, thickness=None):
@@ -41,8 +43,12 @@ class Observatory:
         self.fov_horizontal = fov_horizontal
         self.fov_vertical = fov_vertical
         self.height = height
+        self.tif_image_path = tif_image_path
         self.color = color if color is not None else (255, 255, 255)  # Default color set as white
         self.thickness = thickness if thickness is not None else 1   # Default thickness
+        self.transform_matrix = None
+        self.inverse_transform_matrix = None
+        self.fov = None
 
 
     def coordinates(self):
@@ -51,13 +57,48 @@ class Observatory:
         :return: The observatory's coordinates.
         """
         return self.latitude, self.longitude
+    
+    def get_transform_matrix(self):
+        """
+        This function returns the transform matrix of the geotiff file.
+        :param geotiff_path: The path of the geotiff file.
+        :return: The transform matrix of the geotiff file.
+        """
+        with rasterio.open(self.tif_image_path) as src:
+            self.transform_matrix = src.transform
+        self.transform_matrix = affine_to_array(self.transform_matrix)
+        return self.transform_matrix
+    
+    def find_inverse_transform(self):
+        """
+        This function finds the inverse transform matrix of the geotiff file.
+        :param transform_matrix: The transform matrix of the geotiff file.
+        :return: The inverse transform matrix of the geotiff file.
+        """
+        if self.transform_matrix is None:
+            self.get_transform_matrix()
+        self.inverse_transform_matrix = find_inverse_transform(self.transform_matrix)
+        return self.inverse_transform_matrix
 
     def get_fov(self):
         """
         This function return the observatory's FOV.
         :return: The observatory's FOV.
         """
-        
+        self.fov = Annulus(self.get_pixel_location(), self.distance_maximal, self.distance_minimal, self.start_angle, self.end_angle)
+        return self.fov
+
+    def get_pixel_location(self):
+        """
+        We use the inverse transform matrix to find the pixel location of the observatory.
+        :param geotiff_path: The path of the geotiff file.
+        :return: The pixel location of the observatory in the image.
+        """
+        if self.inverse_transform_matrix is None:
+            self.find_inverse_transform()
+        #TODO: make sure that the transform matrix and its inverse are defined.
+        observatory_pixels = geo_to_pixel(self.latitude, self.longitude, self.inverse_transform_matrix)  # A function from utils/utils.py
+        return observatory_pixels
 
 
     def check_validity(self):
@@ -174,16 +215,8 @@ class Observatory:
             return cls(latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal,
                        fov_vertical, height, color, thickness)
 
-    def get_pixel_location(self, image):
-        """
-    This function gets the pixel location of the observatory in the image.
-    :param geotiff_path: The path of the geotiff file.
-    :return: The pixel location of the observatory in the image.
-    """
-        y, x = image.index(self.longitude, self.latitude)
-        return x, y
     
-    def find_starting_point(self, extreme_point, geotiff_path):
+    def find_starting_point(self, extreme_point):
         """
         This function takes the extreme point and finds the maximal_distance by understanding
         the distance from the extreme point to the observatory.
@@ -216,6 +249,7 @@ class Observatory:
 
         cv2.ellipse(mask_maximal, center, (self.distance_maximal, self.distance_maximal), 0,
                     startAngle=top_arc, endAngle=bottom_arc, color=self.color, thickness=thickness)
+        # If thickness isn't 0, draw the lines which indicate the FOV
         if thickness > 0:
             start_point = (int(center[0] + self.distance_maximal * np.cos(np.deg2rad(top_arc))),
                            int(center[1] + self.distance_maximal * np.sin(np.deg2rad(top_arc))))

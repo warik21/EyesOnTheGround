@@ -4,44 +4,39 @@ import numpy as np
 import pyproj
 from utils.utils import *
 from geopy.distance import great_circle
+from utils.observatory import Observatory
+from utils.scan import ScanningArea
+from utils.utils import *
 
-zvia_coords = 29.544043, 34.975739  #top right (lat, lon)
-zvia_pixels = 16269, 6045  #bottom right (x, y)
+image_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif'
+transform_matrix, resolution = get_transform_matrix(image_path)
+transform_matrix = affine_to_array(transform_matrix)  # Convert pixels to geo
+inv_transform_matrix = inv_transform_matrix = find_inverse_transform(transform_matrix)  # Convert geo to pixels
 
-taba_coords = 29.490278, 34.901843  #bottom left (lat, lon) - gova, rohav
-taba_pixels = 2506, 17567  #top left (x, y)
-
-# Adding a third point for accuracy
+# Define the location of the observatory
 third_point_coords = 29.552339, 34.956392  #top left (lat, lon)
 third_point_pixels = 12659, 4263  #bottom left (x, y)
+observatory = Observatory(latitude=third_point_coords[0], longitude=third_point_coords[1], height=50)
 
+# Define the scanning area
+top_right = 29.548411, 34.974032
+bottom_left = 29.540247, 34.952230
+scanning_area = ScanningArea(top_right, bottom_left)
 
-# Usage
-im_path = 'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_new.tif'
-output_path = 'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif'
-pixel_coords = np.array([taba_pixels, zvia_pixels, third_point_pixels])
-geo_coords = np.array([taba_coords, zvia_coords, third_point_coords])
+# Find the FOV on the ground
+scanning_area.get_pixel_corners(inv_transform_matrix)
+observatory_pixels = observatory.get_pixel_location()
 
-transform_matrix = find_transform_matrix(pixel_coords, geo_coords)
+scanning_area_top_right_pixels = scanning_area.top_right_corner_pixels
 
-# Example/test for later for pixel to geo
-new_pixel_x, new_pixel_y = 10528, 1497
-test_pixel_to_geo(new_pixel_x, new_pixel_y, transform_matrix, 29.565234, 34.944937)
+pixel_distance = np.sqrt((scanning_area_top_right_pixels[1]-observatory_pixels[1])**2 + (scanning_area_top_right_pixels[0]-observatory_pixels[0])**2)  # Euclidean distance
+# pixel_distance = calculate_pixel_distance(real_world_distance, resolution)
+observatory.distance_maximal = pixel_distance
+distance_minimal = observatory.calc_min_distance()
 
-# Example/test for later for geo to pixel
-new_geo_lon, new_geo_lat = 29.565234, 34.944937
-inverse_transform_matrix = find_inverse_transform(transform_matrix)
-test_geo_to_pixel(new_geo_lon, new_geo_lat, inverse_transform_matrix, 10528, 1497)
+observatory.start_angle = calculate_angle(observatory_pixels, scanning_area_top_right_pixels)
+observatory.end_angle = observatory.start_angle + observatory.fov_horizontal
 
-# Test the new coordinates
-with rasterio.open(output_path, 'r') as dataset:
-    # Transform the observatory's geographic coordinates to the image's coordinate system
-    y, x = dataset.index(zvia_coords[1], zvia_coords[0])  # dataset.index(lon, lat) -> (x, y)
-    print(f'Zvia coordinates in the new image are {x}, {y}')
-
-    y, x = dataset.index(taba_coords[1], taba_coords[0])
-    print(f'Taba coordinates in the new image are {x}, {y}')
-
+fov = observatory.get_fov()
 
 print('Done')
-israeli_grid = pyproj.Proj(init='epsg:2039')
