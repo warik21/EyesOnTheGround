@@ -1,27 +1,24 @@
 import rasterio
 from rasterio.transform import from_origin
 import numpy as np
-import pyproj
+import cv2
 from utils.utils import *
-from geopy.distance import great_circle
 from utils.observatory import Observatory
 from utils.scan import ScanningArea
 from utils.utils import *
 
 image_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif'
+observatory_json = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/eriktron/eyesonground/src/cfg_files/known_points/third_point.json'
+scanning_area_json = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/eriktron/eyesonground/src/cfg_files/scan_areas/scanning_area1.json'
 transform_matrix, resolution = get_transform_matrix(image_path)
 transform_matrix = affine_to_array(transform_matrix)  # Convert pixels to geo
 inv_transform_matrix = inv_transform_matrix = find_inverse_transform(transform_matrix)  # Convert geo to pixels
 
 # Define the location of the observatory
-third_point_coords = 29.552339, 34.956392  #top left (lat, lon)
-third_point_pixels = 12659, 4263  #bottom left (x, y)
-observatory = Observatory(latitude=third_point_coords[0], longitude=third_point_coords[1], height=50)
+observatory = Observatory.load_from_file(json_path=observatory_json)
 
 # Define the scanning area
-top_right = 29.548411, 34.974032
-bottom_left = 29.540247, 34.952230
-scanning_area = ScanningArea(top_right, bottom_left)
+scanning_area = ScanningArea.load_from_file(json_path=scanning_area_json)
 
 # Find the FOV on the ground
 scanning_area.get_pixel_corners(inv_transform_matrix)
@@ -29,14 +26,28 @@ observatory_pixels = observatory.get_pixel_location()
 
 scanning_area_top_right_pixels = scanning_area.top_right_corner_pixels
 
-pixel_distance = np.sqrt((scanning_area_top_right_pixels[1]-observatory_pixels[1])**2 + (scanning_area_top_right_pixels[0]-observatory_pixels[0])**2)  # Euclidean distance
+pixel_distance = np.linalg.norm(np.array(scanning_area_top_right_pixels) - np.array(observatory_pixels))
 # pixel_distance = calculate_pixel_distance(real_world_distance, resolution)
+
 observatory.distance_maximal = pixel_distance
 distance_minimal = observatory.calc_min_distance()
-
 observatory.start_angle = calculate_angle(observatory_pixels, scanning_area_top_right_pixels)
 observatory.end_angle = observatory.start_angle + observatory.fov_horizontal
 
 fov = observatory.get_fov()
+middle = fov.find_middle()
+
+image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+image = scanning_area.draw(image=image, color=(0, 0, 255), thickness=10)
+image = fov.draw(image=image, thickness=10)
+
+result_ratio = image.shape[0] / image.shape[1]
+result_size = 2000
+result_resized = cv2.resize(image, (result_size, int(result_size * result_ratio)))
+# result_resized2 = cv2.resize(image, (result_size, int(result_size * result_ratio)))
+cv2.imshow("Direction", result_resized)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+cv2.imwrite('C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/with_middle.jpg', result_resized)
 
 print('Done')

@@ -2,6 +2,7 @@ from geopy.point import Point
 import math
 from utils.utils import geo_to_pixel
 import cv2
+import json
 import numpy as np
 
 class ScanningArea:
@@ -14,7 +15,7 @@ class ScanningArea:
         """
         self.latitude_bounds = (min(corner1[0], corner2[0]), max(corner1[0], corner2[0])) # min is west, max is east
         self.longitude_bounds = (min(corner1[1], corner2[1]), max(corner1[1], corner2[1])) # min is south, max is north
-        self.top_left_corner = None
+        self.get_corners()
 
     def get_corners(self):
         """
@@ -28,7 +29,7 @@ class ScanningArea:
     def get_pixel_corners(self, transform_matrix):
         """
         Calculate the rectangle's corners in pixel coordinates.
-        :param transform_matrix: The inverse tramsform matrix of the image, transforming coordinates into pixels.
+        :param transform_matrix: The inverse transform matrix of the image, transforming coordinates into pixels.
         """
         if self.top_left_corner is None:
             self.get_corners()
@@ -36,6 +37,16 @@ class ScanningArea:
         self.bottom_right_corner_pixels = geo_to_pixel(self.bottom_right_corner_geo[0], self.bottom_right_corner_geo[1], transform_matrix)
         self.top_right_corner_pixels = geo_to_pixel(self.top_right_corner_geo[0], self.top_right_corner_geo[1], transform_matrix)
         self.bottom_left_corner_pixels = geo_to_pixel(self.bottom_left_corner_geo[0], self.bottom_left_corner_geo[1], transform_matrix)
+
+    @classmethod
+    def load_from_file(cls, json_path):
+        with open(json_path, 'r') as file:
+            data = json.load(file)
+
+        corner1 = (data['corner1']['latitude'], data['corner1']['longitude'])
+        corner2 = (data['corner2']['latitude'], data['corner2']['longitude'])
+
+        return cls(corner1, corner2)
 
     def draw(self, image, color=(255, 0, 0), thickness=10):
         """
@@ -121,7 +132,7 @@ class Annulus:
         # add the distance in the direction of the angle
         x = self.center[0] + dist * math.cos(math.radians(angle))
         y = self.center[1] + dist * math.sin(math.radians(angle))
-        self.middle = (x, y) 
+        self.middle = (int(np.round(x)), int(np.round(y))) 
         return self.middle
 
     def draw(self, image, color=(255, 0, 0), thickness=10):
@@ -132,10 +143,31 @@ class Annulus:
         :return: The image with the annulus.
         """
         # Draw the ellipses:
-        cv2.ellipse(image, self.center, (self.distance_maximal, self.distance_maximal), 0,
+        cv2.ellipse(image, self.center, 
+                    (int(np.round(self.distance_maximal)), int(np.round(self.distance_maximal))), 0,
                     startAngle=self.start_angle, endAngle=self.end_angle, color=color, thickness=thickness)
 
-        cv2.ellipse(image, self.center, (self.distance_minimal, self.distance_minimal), 0,
+        cv2.ellipse(image, self.center, 
+                    (int(np.round(self.distance_minimal)), int(np.round(self.distance_minimal))), 0,
                     startAngle=self.start_angle, endAngle=self.end_angle, color=color, thickness=thickness)
+        if thickness > 0:
+            # Calculate start and end points on both ellipses
+            # Start point is the point corresponding to the start angle, end point is the point corresponding to the end angle
+            start_point_outer = (int(self.center[0] + self.distance_maximal * np.cos(np.deg2rad(self.start_angle))),
+                                 int(self.center[1] + self.distance_maximal * np.sin(np.deg2rad(self.start_angle))))
+            end_point_outer = (int(self.center[0] + self.distance_maximal * np.cos(np.deg2rad(self.end_angle))),
+                               int(self.center[1] + self.distance_maximal * np.sin(np.deg2rad(self.end_angle))))
+            
+            start_point_inner = (int(self.center[0] + self.distance_minimal * np.cos(np.deg2rad(self.start_angle))),
+                                 int(self.center[1] + self.distance_minimal * np.sin(np.deg2rad(self.start_angle))))
+            end_point_inner = (int(self.center[0] + self.distance_minimal * np.cos(np.deg2rad(self.end_angle))),
+                               int(self.center[1] + self.distance_minimal * np.sin(np.deg2rad(self.end_angle))))
+
+            # Draw lines connecting outer and inner ellipse at start and end points
+            cv2.line(image, start_point_outer, start_point_inner, color, thickness)
+            cv2.line(image, end_point_outer, end_point_inner, color, thickness)
+
+        # Draw the middle of the annulus
+        cv2.circle(image, self.middle, 10, (0, 0, 255), -1)
 
         return image

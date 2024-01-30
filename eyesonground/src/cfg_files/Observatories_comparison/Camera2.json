@@ -1,0 +1,13 @@
+{
+    "latitude": 16266,
+    "longitude": 6046,
+    "distance_minimal": 0,
+    "distance_maximal": 5000,
+    "start_angle": 40,
+    "end_angle": 160,
+    "fov_horizontal": 10,
+    "fov_vertical": 60,
+    "height_value": 10,
+    "color_value": [0, 255, 0],
+    "thickness": -1
+}

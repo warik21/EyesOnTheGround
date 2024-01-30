@@ -5,6 +5,7 @@ import rasterio
 from geopy.distance import great_circle
 from rasterio.transform import from_origin
 from utils.utils import *
+import json
 
 class Observatory:
     """This class is used to store the observatory information.
@@ -15,6 +16,7 @@ class Observatory:
     def __init__(self, latitude, longitude, 
                 fov_horizontal=32.0, fov_vertical=18.0, height=15.0, 
                 tif_image_path=r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif',
+                x=None, y=None, 
                 distance_minimal=None, distance_maximal=None, 
                 start_angle=None, end_angle=None,
                 color=None, thickness=None):
@@ -44,12 +46,13 @@ class Observatory:
         self.fov_vertical = fov_vertical
         self.height = height
         self.tif_image_path = tif_image_path
+        self.x = x
+        self.y = y
         self.color = color if color is not None else (255, 255, 255)  # Default color set as white
         self.thickness = thickness if thickness is not None else 1   # Default thickness
         self.transform_matrix = None
         self.inverse_transform_matrix = None
         self.fov = None
-
 
     def coordinates(self):
         """
@@ -99,7 +102,6 @@ class Observatory:
         #TODO: make sure that the transform matrix and its inverse are defined.
         observatory_pixels = geo_to_pixel(self.latitude, self.longitude, self.inverse_transform_matrix)  # A function from utils/utils.py
         return observatory_pixels
-
 
     def check_validity(self):
         """
@@ -189,32 +191,10 @@ class Observatory:
         return new_fov_horizontal
 
     @classmethod
-    def load_from_file(cls, file_path):
-        """
-        This function loads the observatory's parameters from a file.
-        """
-        with open(file_path, 'r') as file:
-            data = {}
-            for line in file:
-                key, value = line.strip().split('=')
-                data[key.strip()] = value.strip()
-
-            # Parsing the values
-            latitude = float(data['latitude'])
-            longitude = float(data['longitude'])
-            distance_minimal = int(data['distance_minimal'])
-            distance_maximal = int(data['distance_maximal'])
-            start_angle = int(data['start_angle'])
-            end_angle = int(data['end_angle'])
-            fov_horizontal = int(data['fov_horizontal'])
-            fov_vertical = int(data['fov_vertical'])
-            height = int(data['height_value'])
-            color = tuple(map(int, data['color_value'][1:-1].split(',')))  # Parses "(255,0,0)" to (255, 0, 0)
-            thickness = int(data['thickness'])
-
-            return cls(latitude, longitude, distance_minimal, distance_maximal, start_angle, end_angle, fov_horizontal,
-                       fov_vertical, height, color, thickness)
-
+    def load_from_file(cls, json_path):
+        with open(json_path, 'r') as file:
+            data = json.load(file)
+            return cls(**data)  # Unpack the data as arguments
     
     def find_starting_point(self, extreme_point):
         """
@@ -229,7 +209,7 @@ class Observatory:
         distance = np.linalg.norm(observatory_point - extreme_point)
         return distance
     
-    def draw_mask(self, image_shape, geotiff_path, position):
+    def draw_mask(self, image_shape, geotiff_path, position=0):
         """
         This function draws the mask of the observatory on the image.
         params:

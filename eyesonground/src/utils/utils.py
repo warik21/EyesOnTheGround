@@ -4,6 +4,7 @@ from affine import Affine
 from rasterio.transform import from_gcps
 from rasterio.control import GroundControlPoint
 import math
+import cv2
 
 def pixel_to_geo(pixel_x, pixel_y, transform_matrix):
     geo_coords = np.dot(transform_matrix.T, [pixel_x, pixel_y, 1])
