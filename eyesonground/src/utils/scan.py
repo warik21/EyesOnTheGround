@@ -6,15 +6,17 @@ import json
 import numpy as np
 
 class ScanningArea:
-    def __init__(self, corner1, corner2):
+    def __init__(self, latitude1, latitude2, longitude1, longitude2, 
+                 top_left_corner=None, bottom_right_corner=None, 
+                 top_right_corner=None, bottom_left_corner=None):
         """
         Initializes a ScanningArea object with a rectangular shape based on two diagonal corners.
 
         :param corner1: Tuple of (latitude, longitude) for the first corner.
         :param corner2: Tuple of (latitude, longitude) for the opposite corner.
         """
-        self.latitude_bounds = (min(corner1[0], corner2[0]), max(corner1[0], corner2[0])) # min is west, max is east
-        self.longitude_bounds = (min(corner1[1], corner2[1]), max(corner1[1], corner2[1])) # min is south, max is north
+        self.latitude_bounds = (min(latitude1, latitude2), max(latitude1, latitude2)) # min is west, max is east
+        self.longitude_bounds = (min(longitude1, longitude2), max(longitude1, latitude2)) # min is south, max is north
         self.get_corners()
 
     def get_corners(self):
@@ -31,8 +33,6 @@ class ScanningArea:
         Calculate the rectangle's corners in pixel coordinates.
         :param transform_matrix: The inverse transform matrix of the image, transforming coordinates into pixels.
         """
-        if self.top_left_corner is None:
-            self.get_corners()
         self.top_left_corner_pixels = geo_to_pixel(self.top_left_corner_geo[0], self.top_left_corner_geo[1], transform_matrix)
         self.bottom_right_corner_pixels = geo_to_pixel(self.bottom_right_corner_geo[0], self.bottom_right_corner_geo[1], transform_matrix)
         self.top_right_corner_pixels = geo_to_pixel(self.top_right_corner_geo[0], self.top_right_corner_geo[1], transform_matrix)
@@ -43,10 +43,7 @@ class ScanningArea:
         with open(json_path, 'r') as file:
             data = json.load(file)
 
-        corner1 = (data['corner1']['latitude'], data['corner1']['longitude'])
-        corner2 = (data['corner2']['latitude'], data['corner2']['longitude'])
-
-        return cls(corner1, corner2)
+        return cls(**data)
 
     def draw(self, image, color=(255, 0, 0), thickness=10):
         """
@@ -59,8 +56,18 @@ class ScanningArea:
         cv2.rectangle(image, self.top_left_corner_pixels, self.bottom_right_corner_pixels, color, thickness)
 
         return image
-
-
+    
+def load_and_prepare_scanning_area(file_path, inv_transform_matrix):
+    """
+    This function loads a scanning area from a json file and calculates its pixel corners.
+    :param file_path: The path to the json file.
+    :param inv_transform_matrix: The inverse transform matrix of the image, transforming coordinates into pixels.
+    :return: The scanning area object.
+    """
+    scanning_area = ScanningArea.load_from_file(file_path)
+    scanning_area.get_pixel_corners(inv_transform_matrix)
+    return scanning_area
+    
 class Annulus:
     def __init__(self, center, distance_maximal, distance_minimal, start_angle, end_angle):
         """
@@ -123,7 +130,7 @@ class Annulus:
 
         return np.logical_and(in_outer, out_inner)
 
-    def find_middle(self):
+    def get_middle(self):
         """
         Find the middle point of the annulus.
         """
@@ -143,6 +150,7 @@ class Annulus:
         :return: The image with the annulus.
         """
         # Draw the ellipses:
+        # NOTE: This won't work with -1 thickness
         cv2.ellipse(image, self.center, 
                     (int(np.round(self.distance_maximal)), int(np.round(self.distance_maximal))), 0,
                     startAngle=self.start_angle, endAngle=self.end_angle, color=color, thickness=thickness)
@@ -171,3 +179,12 @@ class Annulus:
         cv2.circle(image, self.middle, 10, (0, 0, 255), -1)
 
         return image
+
+    def get_bottom_point_longitude(self):
+        """
+        Get the longitude of the bottom point of the annulus.
+        """
+        right_y = int(self.center[1] + self.distance_maximal * np.sin(np.deg2rad(self.start_angle)))
+        left_y = int(self.center[1] + self.distance_maximal * np.sin(np.deg2rad(self.end_angle)))
+        return max(right_y, left_y)
+    

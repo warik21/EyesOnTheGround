@@ -3,51 +3,37 @@ from rasterio.transform import from_origin
 import numpy as np
 import cv2
 from utils.utils import *
-from utils.observatory import Observatory
-from utils.scan import ScanningArea
+from utils.observatory import Observatory, load_and_prepare_observatory
+from utils.scan import ScanningArea, load_and_prepare_scanning_area
 from utils.utils import *
+
 
 image_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif'
 observatory_json = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/eriktron/eyesonground/src/cfg_files/known_points/third_point.json'
 scanning_area_json = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/eriktron/eyesonground/src/cfg_files/scan_areas/scanning_area1.json'
+output_video_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/vid.mp4'
+
 transform_matrix, resolution = get_transform_matrix(image_path)
-transform_matrix = affine_to_array(transform_matrix)  # Convert pixels to geo
-inv_transform_matrix = inv_transform_matrix = find_inverse_transform(transform_matrix)  # Convert geo to pixels
+inv_transform_matrix = find_inverse_transform(affine_to_array(transform_matrix))
+observatory = load_and_prepare_observatory(observatory_json, tif_image_path=image_path)
+scanning_area = load_and_prepare_scanning_area(scanning_area_json, inv_transform_matrix)
 
-# Define the location of the observatory
-observatory = Observatory.load_from_file(json_path=observatory_json)
+# Load base image and draw scanning area
+base_image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+base_image = scanning_area.draw(base_image, color=(0, 0, 255), thickness=10)
 
-# Define the scanning area
-scanning_area = ScanningArea.load_from_file(json_path=scanning_area_json)
 
-# Find the FOV on the ground
-scanning_area.get_pixel_corners(inv_transform_matrix)
-observatory_pixels = observatory.get_pixel_location()
-
-scanning_area_top_right_pixels = scanning_area.top_right_corner_pixels
-
-pixel_distance = np.linalg.norm(np.array(scanning_area_top_right_pixels) - np.array(observatory_pixels))
-# pixel_distance = calculate_pixel_distance(real_world_distance, resolution)
-
+top_right_pixels = scanning_area.top_right_corner_pixels
+pixel_distance = np.linalg.norm(np.array(top_right_pixels) - np.array(observatory.pixels))
 observatory.distance_maximal = pixel_distance
-distance_minimal = observatory.calc_min_distance()
-observatory.start_angle = calculate_angle(observatory_pixels, scanning_area_top_right_pixels)
+observatory.calc_min_distance()  # Assuming this updates some internal state
+observatory.start_angle = calculate_angle(observatory.pixels, top_right_pixels)
 observatory.end_angle = observatory.start_angle + observatory.fov_horizontal
-
 fov = observatory.get_fov()
-middle = fov.find_middle()
+fov.get_middle()
 
-image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-image = scanning_area.draw(image=image, color=(0, 0, 255), thickness=10)
-image = fov.draw(image=image, thickness=10)
-
-result_ratio = image.shape[0] / image.shape[1]
-result_size = 2000
-result_resized = cv2.resize(image, (result_size, int(result_size * result_ratio)))
-# result_resized2 = cv2.resize(image, (result_size, int(result_size * result_ratio)))
-cv2.imshow("Direction", result_resized)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-cv2.imwrite('C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/with_middle.jpg', result_resized)
+# setup_fov(observatory, scanning_area)
+num_frames = 100
+# draw_moving_fov(base_image, observatory, scanning_area, num_frames, output_video_path)
 
 print('Done')

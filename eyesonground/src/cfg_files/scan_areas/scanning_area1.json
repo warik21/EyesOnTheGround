@@ -1,4 +1,6 @@
 {
-    "corner1": {"latitude": 29.548411, "longitude": 34.974032},
-    "corner2": {"latitude": 29.540247, "longitude": 34.952230}
+    "latitude1": 29.548411,
+    "longitude1": 34.974032,
+    "latitude2": 29.540247,
+    "longitude2": 34.952230
 }

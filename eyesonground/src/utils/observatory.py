@@ -100,8 +100,8 @@ class Observatory:
         if self.inverse_transform_matrix is None:
             self.find_inverse_transform()
         #TODO: make sure that the transform matrix and its inverse are defined.
-        observatory_pixels = geo_to_pixel(self.latitude, self.longitude, self.inverse_transform_matrix)  # A function from utils/utils.py
-        return observatory_pixels
+        self.pixels = geo_to_pixel(self.latitude, self.longitude, self.inverse_transform_matrix)  # A function from utils/utils.py
+        return self.pixels
 
     def check_validity(self):
         """
@@ -211,7 +211,9 @@ class Observatory:
     
     def draw_mask(self, image_shape, geotiff_path, position=0):
         """
-        This function draws the mask of the observatory on the image.
+        This function draws the mask of the observatory on the image. It is used foo
+        when only the angle is moving, without change of distance or zoom, this method
+        will be deprecated in the future, and all drawing will be in the fov/annulus class.
         params:
         geotiff_path(str): The path of the geotiff file.
         image_shape(tuple): The shape of the image.
@@ -246,3 +248,16 @@ class Observatory:
         mask = cv2.subtract(mask_maximal, mask_minimal)
 
         return mask
+
+def load_and_prepare_observatory(file_path, tif_image_path=None, transform_matrix=None):
+    """
+    This function loads an observatory from a json file and calculates its pixel location.
+    :param file_path: The path to the json file.
+    :param tif_image_path: The path to the tif image.
+    :param transform_matrix: The transform matrix of the image, transforming pixels into coordinates.
+    :return: The observatory object.
+    """
+    observatory = Observatory.load_from_file(file_path)
+    observatory.tif_image_path = tif_image_path
+    observatory.get_pixel_location()
+    return observatory

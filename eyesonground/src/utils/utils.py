@@ -10,7 +10,6 @@ def pixel_to_geo(pixel_x, pixel_y, transform_matrix):
     geo_coords = np.dot(transform_matrix.T, [pixel_x, pixel_y, 1])
     return geo_coords[:2]  # This is actually lon, lat and only contains 2 elements.
 
-
 def geo_to_pixel(lat, lon, inverse_transform_matrix):
     geo_coords_augmented = np.array([lat, lon, 1])  # Make it a 3-element vector
     pixel_coords = np.dot(inverse_transform_matrix, geo_coords_augmented)
@@ -78,52 +77,6 @@ def get_transform_matrix(raster_file_path):
         resolution = dataset.res
         return transform, resolution
     
-def draw_direction(image_size, start_point, observatory, length=100, color=(255, 0, 0), thickness=2):
-    """
-    Draw an arrow representing the direction on a blank image.
-
-    :param image_size: Size of the image (width, height).
-    :param start_point: Starting point (x, y) for the arrow.
-    :param angle: Angle in degrees.
-    :param length: Length of the arrow.
-    :param color: Color of the arrow (B, G, R).
-    :param thickness: Thickness of the arrow.
-    :return: Image with the arrow.
-    """
-    # Create a blank image
-    mask_maximal: np.ndarray = np.zeros((image_size[0], image_size[1], 3), dtype='uint8')
-    mask_minimal: np.ndarray = np.zeros((image_size[0], image_size[1], 3), dtype='uint8')
-
-    # Calculate end point of the arrow
-    end_x = int(start_point[0] + length * math.cos(math.radians(observatory.start_angle)))
-    end_y = int(start_point[1] + length * math.sin(math.radians(observatory.start_angle)))  # Subtract because y increases downwards
-
-    # Draw the ellipses:
-    # cv2.ellipse(mask_maximal, start_point, (observatory.distance_maximal, observatory.distance_maximal), 0,
-    #             startAngle=observatory.start_angle, endAngle=observatory.end_angle, color=color, thickness=-1)
-    cv2.ellipse(mask_minimal, start_point, (int(observatory.distance_minimal), int(observatory.distance_minimal)), 0,
-                startAngle=observatory.start_angle, endAngle=observatory.end_angle, color=color, thickness=-1)
-
-    cv2.ellipse(mask_maximal, start_point, (int(observatory.distance_maximal), int(observatory.distance_maximal)), 0,
-                startAngle=observatory.start_angle, endAngle=observatory.end_angle, color=color, thickness=-1)
-
-    mask = cv2.subtract(mask_maximal, mask_minimal)
-    # Draw the lines
-
-    cv2.arrowedLine(mask, start_point, (end_x, end_y), (0,0,255), thickness)
-
-    return mask
-
-def calculate_pixel_distance(real_world_distance, resolution):
-    """
-    Calculate the distance in pixels based on the real world distance and the resolution.
-
-    :param real_world_distance: The distance in meters.
-    :param resolution: The resolution of the image.
-    :return: The distance in pixels.
-    """
-    return real_world_distance / resolution[0]
-
 def affine_to_array(affine_obj):
     """
     Convert an affine transformation object to a 3x3 NumPy array.
@@ -159,5 +112,61 @@ def calculate_angle(pixel_location_observatory, pixel_location_top_left):
     return angle_degrees
 
 
-    
-    
+
+
+# def setup_fov(observatory, scanning_area):
+#     """
+#     This function sets up the fov of the observatory.
+#     :param observatory: The observatory object.
+#     :param scanning_area: The scanning area object.
+#     """
+#     top_right_pixels = scanning_area.top_right_corner_pixels
+#     pixel_distance = np.linalg.norm(np.array(top_right_pixels) - np.array(observatory.pixels))
+#     observatory.distance_maximal = pixel_distance
+#     observatory.calc_min_distance()  # Assuming this updates some internal state
+#     observatory.start_angle = calculate_angle(observatory.pixels, top_right_pixels)
+#     observatory.end_angle = observatory.start_angle + observatory.fov_horizontal
+#     fov = observatory.get_fov()
+#     fov.get_middle()
+# 
+# def draw_and_save(image, observatory, scanning_area, output_path):
+#     """
+#     This function draws the observatory and scanning area on the image and saves it.
+#     :param image: The image to draw on.
+#     :param observatory: The observatory object.
+#     :param scanning_area: The scanning area object.
+#     :param output_path: The path to save the image to.
+#     """
+#     image = scanning_area.draw(image, color=(0, 0, 255), thickness=10)
+#     fov = observatory.fov
+#     image = fov.draw(image, thickness=10)
+#     
+#     result_size = 2000
+#     result_ratio = image.shape[0] / image.shape[1]
+#     result_resized = cv2.resize(image, (result_size, int(result_size * result_ratio)))
+#     cv2.imshow("Direction", result_resized)
+#     cv2.waitKey(0)
+#     cv2.destroyAllWindows()
+#     cv2.imwrite(output_path, result_resized)
+# 
+# def draw_moving_fov(base_image, observatory, scanning_area, num_frames, output_video_file):
+#     # Define the codec and create VideoWriter object
+#     height, width, _ = base_image.shape
+#     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Adjust the codec as needed
+#     video = cv2.VideoWriter(output_video_file, fourcc, 20.0, (width, height))
+# 
+#     for frame in range(num_frames):
+#         # Update FOV position - implement this method to update the FOV position
+#         observatory.update_position(...)
+# 
+#         # Copy base image for drawing
+#         frame_image = base_image.copy()
+# 
+#         # Draw the FOV
+#         fov = observatory.get_fov()  
+#         frame_image = fov.draw(frame_image, thickness=10) 
+# 
+#         # Write the frame to the video
+#         video.write(frame_image)
+# 
+#     video.release()
