@@ -37,6 +37,9 @@ class ScanningArea:
         self.bottom_right_corner_pixels = geo_to_pixel(self.bottom_right_corner_geo[0], self.bottom_right_corner_geo[1], transform_matrix)
         self.top_right_corner_pixels = geo_to_pixel(self.top_right_corner_geo[0], self.top_right_corner_geo[1], transform_matrix)
         self.bottom_left_corner_pixels = geo_to_pixel(self.bottom_left_corner_geo[0], self.bottom_left_corner_geo[1], transform_matrix)
+        # Calculate the pixel bounds:
+        self.pixel_x_bounds = (min(self.top_left_corner_pixels[0], self.bottom_right_corner_pixels[0]), max(self.top_left_corner_pixels[0], self.bottom_right_corner_pixels[0]))
+        self.pixel_y_bounds = (min(self.top_left_corner_pixels[1], self.bottom_right_corner_pixels[1]), max(self.top_left_corner_pixels[1], self.bottom_right_corner_pixels[1]))
 
     @classmethod
     def load_from_file(cls, json_path):
@@ -69,6 +72,9 @@ def load_and_prepare_scanning_area(file_path, inv_transform_matrix):
     return scanning_area
     
 class Annulus:
+    """
+    This class is meant to draw and work on the annulus which represents the FOV of the observatory.
+    """
     def __init__(self, center, distance_maximal, distance_minimal, start_angle, end_angle):
         """
         Initializes an Annulus object representing the area between two ellipses.

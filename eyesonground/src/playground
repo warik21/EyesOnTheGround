@@ -4,8 +4,61 @@ import numpy as np
 import cv2
 from utils.utils import *
 from utils.observatory import Observatory, load_and_prepare_observatory
-from utils.scan import ScanningArea, load_and_prepare_scanning_area
+from utils.scan import ScanningArea, Annulus, load_and_prepare_scanning_area
 from utils.utils import *
+from tqdm import tqdm
+
+
+def get_distance_at_south(observatory, scanning_area):
+    """
+    This function calculates the distance and angle between the observatory and the scanning area.
+    :param observatory: The observatory object.
+    :param scanning_area: The scanning area object.
+    :return: The distance and angle between the observatory and the scanning area.
+    """
+    south_point = scanning_area.pixel_y_bounds[1]
+    pixel_distance = np.array(south_point) - np.array(observatory.pixels[1])
+    return pixel_distance
+
+def find_key_points(observatory, scanning_area):
+    """
+    This function finds the key points of the scanning area.
+    :param observatory: The observatory object.
+    :param scanning_area: The scanning area object.
+    :return: The key points of the scanning area.
+    """
+    # Get the key points of the scanning area
+    top_right_corner = scanning_area.top_right_corner_pixels
+    top_left_corner = scanning_area.top_left_corner_pixels
+    # Calculate the angles from the observatory to the key points
+    angle_top_right, angle_top_left, angle_middle = find_angles(observatory, top_right_corner, top_left_corner)
+    # Calculate the distances from the observatory to the key points
+    distance_top_right, distance_top_left, distance_middle = find_distances(observatory, top_right_corner, top_left_corner, scanning_area)
+    key_points = zip([angle_top_right, angle_top_left, angle_middle], [distance_top_right, distance_top_left, distance_middle])
+    return list(key_points)
+
+def find_angles(observatory, top_right_corner, top_left_corner):
+    """
+    This function finds the angles from the observatory to the top right and top left corners of the scanning area.
+    :param observatory: The observatory object.
+    """
+    # The top right angle will be when we look into the rightmost point of the FOV, the top left angle will be when we look into the leftmost point of the FOV
+    # For this reason, we need to add and subtract half of the FOV from the angle to the top right and top left corners, respectively
+    angle_top_right = calculate_angle(observatory.pixels, top_right_corner) + (observatory.fov_horizontal / 2)
+    angle_top_left = calculate_angle(observatory.pixels, top_left_corner) - (observatory.fov_horizontal / 2)
+    angle_middle = 90  # The middle of the FOV is always 90 degrees
+    return angle_top_right, angle_top_left, angle_middle
+
+def find_distances(observatory, top_right_corner, top_left_corner, scanning_area):
+    """
+    This function finds the distances from the observatory to the top right and top left corners of the scanning area.
+    :param observatory: The observatory object.
+    """
+    # Calculate the distances from the observatory to the top right and top left corners
+    distance_top_right = np.linalg.norm(np.array(top_right_corner) - np.array(observatory.pixels))
+    distance_top_left = np.linalg.norm(np.array(top_left_corner) - np.array(observatory.pixels))
+    distance_middle = get_distance_at_south(observatory, scanning_area)
+    return distance_top_right, distance_top_left, distance_middle
 
 
 image_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif'
@@ -17,23 +70,43 @@ transform_matrix, resolution = get_transform_matrix(image_path)
 inv_transform_matrix = find_inverse_transform(affine_to_array(transform_matrix))
 observatory = load_and_prepare_observatory(observatory_json, tif_image_path=image_path)
 scanning_area = load_and_prepare_scanning_area(scanning_area_json, inv_transform_matrix)
+output_video_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/vid.mp4'
 
 # Load base image and draw scanning area
 base_image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
 base_image = scanning_area.draw(base_image, color=(0, 0, 255), thickness=10)
 
 
-top_right_pixels = scanning_area.top_right_corner_pixels
-pixel_distance = np.linalg.norm(np.array(top_right_pixels) - np.array(observatory.pixels))
-observatory.distance_maximal = pixel_distance
-observatory.calc_min_distance()  # Assuming this updates some internal state
-observatory.start_angle = calculate_angle(observatory.pixels, top_right_pixels)
-observatory.end_angle = observatory.start_angle + observatory.fov_horizontal
-fov = observatory.get_fov()
-fov.get_middle()
+key_points = find_key_points(observatory, scanning_area)
+observatory.start_angle = key_points[0][0] - (observatory.fov_horizontal / 2)
+observatory.distance_maximal = key_points[0][1]
+positions = [(observatory.start_angle, observatory.distance_maximal)]
+observatory.calc_min_distance()
+new_positions = observatory.get_next_positions(key_points[2][0] - (observatory.fov_horizontal / 2), key_points[2][1])
+positions += new_positions
 
-# setup_fov(observatory, scanning_area)
-num_frames = 100
+#Create a video
+print('Creating video')
+height, width, _ = base_image.shape
+video_size = 2000
+result_ratio = height / width
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Adjust the codec as needed
+video = cv2.VideoWriter(output_video_path, fourcc, 20.0, (video_size, int(video_size * result_ratio)))
+for position in tqdm(positions):
+    observatory.distance_maximal = position[1]
+    distance_minimal = observatory.calc_min_distance(print_result=False)
+    fov = Annulus(observatory.pixels, distance_maximal=position[1], distance_minimal=distance_minimal, 
+                  start_angle=position[0], end_angle=position[0] + observatory.fov_horizontal)
+    fov.get_middle()
+    
+    frame_image = base_image.copy()
+    frame_image = fov.draw(frame_image, thickness=-1)
+    frame_resized = cv2.resize(frame_image, (video_size, int(video_size * result_ratio)))
+    video.write(frame_resized)
+video.release()
+print('Video created')
+
+
 # draw_moving_fov(base_image, observatory, scanning_area, num_frames, output_video_path)
 
 print('Done')

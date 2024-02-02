@@ -14,11 +14,11 @@ class Observatory:
     """
 
     def __init__(self, latitude, longitude, 
-                fov_horizontal=32.0, fov_vertical=18.0, height=15.0, 
+                fov_horizontal=32.0, fov_vertical=18.0, height=15.0, angluar_velocity=0.1,
                 tif_image_path=r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif',
                 x=None, y=None, 
                 distance_minimal=None, distance_maximal=None, 
-                start_angle=None, end_angle=None,
+                start_angle=None, looking_angle=None, end_angle=None,
                 color=None, thickness=None):
         """
         Initializes the attributes of an observatory object. Optional parameters are set to None by default.
@@ -41,10 +41,12 @@ class Observatory:
         self.distance_minimal = distance_minimal
         self.distance_maximal = distance_maximal
         self.start_angle = start_angle
+        self.looking_angle = looking_angle
         self.end_angle = end_angle
         self.fov_horizontal = fov_horizontal
         self.fov_vertical = fov_vertical
         self.height = height
+        self.angluar_velocity = angluar_velocity
         self.tif_image_path = tif_image_path
         self.x = x
         self.y = y
@@ -53,6 +55,8 @@ class Observatory:
         self.transform_matrix = None
         self.inverse_transform_matrix = None
         self.fov = None
+        self.pixels = None
+        self.positions = None
 
     def coordinates(self):
         """
@@ -126,7 +130,7 @@ class Observatory:
             return False
         return True
 
-    def calc_min_distance(self):
+    def calc_min_distance(self, print_result=True):
         """
         This function calculates the minimal distance that the observatory can see based on
         its height, FOV, and maximal distance. It updates the distance_minimal attribute.
@@ -138,7 +142,8 @@ class Observatory:
         new_min_distance = self.height * np.tan(deg_min)
         
         # Print the existing and new minimal distance
-        print(f"Existing Min Distance:{self.distance_minimal}, New Min Distance:{new_min_distance}")
+        if print_result:
+            print(f"Existing Min Distance:{self.distance_minimal}, New Min Distance:{new_min_distance}")
         
         # Update the distance_minimal attribute
         self.distance_minimal = new_min_distance
@@ -248,6 +253,45 @@ class Observatory:
         mask = cv2.subtract(mask_maximal, mask_minimal)
 
         return mask
+
+    def get_next_positions(self, destination_angle, destination_distance):
+        """
+        This function returns the next position of the observatory.
+        :return: The next position of the observatory.
+        """
+        num_frames = int((destination_angle - self.start_angle) / self.angluar_velocity)
+        angles = np.linspace(self.start_angle, destination_angle, num_frames)
+        distances = np.linspace(self.distance_maximal, destination_distance, num_frames)
+        return list(zip(angles, distances))
+
+    def scan(self):
+        """
+        This function scans the area.
+        """
+
+
+        #smallest_angle = self.get_smallest_angle()
+        #largest_angle = self.get_largest_angle()
+        #initial_distance = self.distance_maximal
+
+    def get_smallest_angle(self, scan_area):
+        """
+        This function returns the smallest angle relevant in the scanning area for the observatory.
+        This angle depends directly on the top right corner of the scanning area
+        :return: The smallest angle.
+        """
+        angle = calculate_angle(self.pixels, scan_area.top_right_corner_pixels)
+        angle += self.fov_horizontal/2  # We add half of the FOV to get the angle of the middle of the FOV
+        return angle
+
+    def get_largest_angle(self, scan_area):
+        """
+        This function returns the largest angle.
+        :return: The largest angle.
+        """
+        angle = calculate_angle(self.pixels, scan_area.top_left_corner_pixels)
+        angle -= self.fov_horizontal/2  # We subtract half of the FOV to get the angle of the middle of the FOV
+        return angle
 
 def load_and_prepare_observatory(file_path, tif_image_path=None, transform_matrix=None):
     """
