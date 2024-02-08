@@ -27,7 +27,6 @@ class define_scan():
         """
         # Define the scanning area
         self.scan_area = ScanningArea((self.x_max, self.y_max), (self.x_min, self.y_min))
-        
         fov = self.observatory.get_fov()
 
         return None

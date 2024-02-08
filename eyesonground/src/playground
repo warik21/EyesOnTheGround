@@ -5,7 +5,6 @@ import cv2
 from utils.utils import *
 from utils.observatory import Observatory, load_and_prepare_observatory
 from utils.scan import ScanningArea, Annulus, load_and_prepare_scanning_area
-from utils.utils import *
 from tqdm import tqdm
 
 
@@ -29,12 +28,16 @@ def find_key_points(observatory, scanning_area):
     """
     # Get the key points of the scanning area
     top_right_corner = scanning_area.top_right_corner_pixels
-    top_left_corner = scanning_area.top_left_corner_pixels
+    top_left_corner = scanning_area.bottom_right_corner_pixels
     # Calculate the angles from the observatory to the key points
-    angle_top_right, angle_top_left, angle_middle = find_angles(observatory, top_right_corner, top_left_corner)
+    angle_top_right, angle_bottom_right, angle_top_left, angle_middle = find_angles(observatory, top_right_corner, top_left_corner)
+    print('Angles are: angle_top_right:', angle_top_right, 'angle_bottom_right:', angle_bottom_right, 'angle_top_left:', angle_top_left, 'angle_middle:', angle_middle)
     # Calculate the distances from the observatory to the key points
-    distance_top_right, distance_top_left, distance_middle = find_distances(observatory, top_right_corner, top_left_corner, scanning_area)
-    key_points = zip([angle_top_right, angle_top_left, angle_middle], [distance_top_right, distance_top_left, distance_middle])
+    distance_top_right, distance_bottom_right, distance_top_left, distance_middle = find_distances(observatory, top_right_corner, top_left_corner, scanning_area)
+    print('Distances are: distance_top_right:', distance_top_right, 'distance_bottom_right:', distance_bottom_right, 'distance_top_left:', distance_top_left, 'distance_middle:', distance_middle)
+    # Create a list of the key points
+    key_points = zip([angle_top_right, angle_bottom_right, angle_top_left, angle_middle], 
+                     [distance_top_right, distance_bottom_right, distance_top_left, distance_middle])
     return list(key_points)
 
 def find_angles(observatory, top_right_corner, top_left_corner):
@@ -45,9 +48,35 @@ def find_angles(observatory, top_right_corner, top_left_corner):
     # The top right angle will be when we look into the rightmost point of the FOV, the top left angle will be when we look into the leftmost point of the FOV
     # For this reason, we need to add and subtract half of the FOV from the angle to the top right and top left corners, respectively
     angle_top_right = calculate_angle(observatory.pixels, top_right_corner) + (observatory.fov_horizontal / 2)
-    angle_top_left = calculate_angle(observatory.pixels, top_left_corner) - (observatory.fov_horizontal / 2)
+    angle_bottom_right = find_angle_bottom_right(observatory, scanning_area)
+    angle_top_left = calculate_angle(observatory.pixels, top_left_corner) + (observatory.fov_horizontal / 2)
     angle_middle = 90  # The middle of the FOV is always 90 degrees
-    return angle_top_right, angle_top_left, angle_middle
+    return angle_top_right, angle_bottom_right, angle_top_left, angle_middle
+
+def find_angle_bottom_right(observatory, scanning_area):
+    """
+    This function finds the angle at which the FOV is looking at when intersecting with both bottom and right edges of the scanning area.
+    We use some trigonometry, and isolate the radius of the FOV to find the angle.
+    sin(fov+angle) = (y_center - y_bottom) / radius
+    cos(angle) = (x_right - x_center) / radius
+    :param observatory: The observatory object.
+    :param scanning_area: The scanning area object.
+    :return: The angle to the bottom right corner of the scanning area.
+    """
+    x_center, y_center = observatory.pixels
+    x_right, y_bottom = scanning_area.bottom_right_corner_pixels
+    # Calculate the mutual constant, which is (x_right - x_center) / (y_bottom - y_center)
+    mutual_constant = (x_right - x_center) / (y_bottom - y_center)
+    # cos(angle) = sin(fov+angle) * mutual_constant
+    # cos(angle) = sin(fov) * cos(angle) * mutual_constant + cos(fov) * sin(angle) * mutual_constant
+    # cos(angle) - sin(fov) * cos(angle) * mutual_constant = cos(fov) * sin(angle) * mutual_constant
+    # cos(angle) * (1 - sin(fov) * mutual_constant) = cos(fov) * sin(angle) * mutual_constant
+    # tan(angle) = (1 - sin(fov) * mutual_constant) / (cos(fov) * mutual_constant)
+    degree_angle = np.deg2rad(observatory.fov_horizontal)
+    tan_angle = (1 - (np.sin(degree_angle) * mutual_constant)) / (np.cos(degree_angle) * mutual_constant)
+    angle = np.arctan(tan_angle)
+    angle = np.rad2deg(angle)
+    return angle + (observatory.fov_horizontal / 2)
 
 def find_distances(observatory, top_right_corner, top_left_corner, scanning_area):
     """
@@ -56,9 +85,12 @@ def find_distances(observatory, top_right_corner, top_left_corner, scanning_area
     """
     # Calculate the distances from the observatory to the top right and top left corners
     distance_top_right = np.linalg.norm(np.array(top_right_corner) - np.array(observatory.pixels))
+    # radius = (x_right - x_center) / cos(angle)
+    distance_bottom_right = (scanning_area.pixel_x_bounds[1] - observatory.x) / np.cos(np.deg2rad(find_angle_bottom_right(observatory, scanning_area) - observatory.fov_horizontal / 2))
+    # Find other distances:
     distance_top_left = np.linalg.norm(np.array(top_left_corner) - np.array(observatory.pixels))
     distance_middle = get_distance_at_south(observatory, scanning_area)
-    return distance_top_right, distance_top_left, distance_middle
+    return distance_top_right, distance_bottom_right, distance_top_left, distance_middle
 
 
 image_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/eilat_updated.tif'
@@ -70,7 +102,6 @@ transform_matrix, resolution = get_transform_matrix(image_path)
 inv_transform_matrix = find_inverse_transform(affine_to_array(transform_matrix))
 observatory = load_and_prepare_observatory(observatory_json, tif_image_path=image_path)
 scanning_area = load_and_prepare_scanning_area(scanning_area_json, inv_transform_matrix)
-output_video_path = r'C:/Users/eriki/OneDrive/Documents/all_folder/other_projects/images_and_reults/vid.mp4'
 
 # Load base image and draw scanning area
 base_image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
@@ -82,11 +113,11 @@ observatory.start_angle = key_points[0][0] - (observatory.fov_horizontal / 2)
 observatory.distance_maximal = key_points[0][1]
 positions = [(observatory.start_angle, observatory.distance_maximal)]
 observatory.calc_min_distance()
-new_positions = observatory.get_next_positions(key_points[2][0] - (observatory.fov_horizontal / 2), key_points[2][1])
+new_positions = observatory.get_next_positions(key_points[1][0] - (observatory.fov_horizontal / 2), key_points[1][1])
 positions += new_positions
 
 #Create a video
-print('Creating video')
+print('Creating video, number of frames: ', len(positions))
 height, width, _ = base_image.shape
 video_size = 2000
 result_ratio = height / width

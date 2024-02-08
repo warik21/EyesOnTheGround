@@ -149,21 +149,18 @@ class Annulus:
         return self.middle
 
     def draw(self, image, color=(255, 0, 0), thickness=10):
-        """
-        Draw the annulus on an image.
+        # Create a blank mask with the same dimensions as the input image
+        mask = np.zeros(image.shape, dtype=np.uint8)
 
-        :param image: The image to draw on.
-        :return: The image with the annulus.
-        """
-        # Draw the ellipses:
-        # NOTE: This won't work with -1 thickness
-        cv2.ellipse(image, self.center, 
+        # Draw the ellipses on the mask instead of the image
+        cv2.ellipse(mask, self.center, 
                     (int(np.round(self.distance_maximal)), int(np.round(self.distance_maximal))), 0,
-                    startAngle=self.start_angle, endAngle=self.end_angle, color=color, thickness=thickness)
+                    startAngle=self.start_angle, endAngle=self.end_angle, color=color, thickness=thickness)  # Use white color (255) for the mask
 
-        cv2.ellipse(image, self.center, 
+        cv2.ellipse(mask, self.center, 
                     (int(np.round(self.distance_minimal)), int(np.round(self.distance_minimal))), 0,
                     startAngle=self.start_angle, endAngle=self.end_angle, color=color, thickness=thickness)
+
         if thickness > 0:
             # Calculate start and end points on both ellipses
             # Start point is the point corresponding to the start angle, end point is the point corresponding to the end angle
@@ -181,10 +178,11 @@ class Annulus:
             cv2.line(image, start_point_outer, start_point_inner, color, thickness)
             cv2.line(image, end_point_outer, end_point_inner, color, thickness)
 
-        # Draw the middle of the annulus
         cv2.circle(image, self.middle, 10, (0, 0, 255), -1)
 
-        return image
+        new_image = cv2.addWeighted(image, 1, mask, 0.5, 0)
+        return new_image
+
 
     def get_bottom_point_longitude(self):
         """
